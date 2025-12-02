@@ -75,6 +75,9 @@ st.write(
   Some columns from our dataset can be found below:
   """
 )
+
+st.info("The full Jupyter Notebook (FINALDATASETCREATION.ipynb) containing our data processing can be found on GitHub")
+
 st.dataframe(session.table("FINAL_MASTER_DATASET").limit(10).collect())
 
 st.write(
@@ -99,9 +102,10 @@ st.write(
   We started with 33,904 individual NOAA storm events, used 5 digit FIPS codes to identify counties in the U.S., and grouped 48+ storm types into 13 categories (Tornado, Flood, Wind, etc.).
   The overall accuracy of our model is 91%, and we then used the prediction probabilities as severity scores (85% confident = 0.85 severity).
   Below is a small snippet from the Jupyter Notebook where we cleaned the data, trained the model, evaluated the model performance, and created storm predictions by county. 
-  The full Jupyter Notebook (NOAA_STORM_EVENTS_MODEL.ipynb) can be found on our GitHub. 
   """
 )
+
+st.info("The full Jupyter Notebook (NOAA_STORM_EVENTS_MODEL.ipynb) can be found on our GitHub")
 
 st.code("""
 # encode and train model 
@@ -195,6 +199,333 @@ st.image("images/risk_scores.png", caption="Risk Score Breakdown", use_container
 #   View the full Jupyter Notebook on our GitHub at 
 #   """
 # )
+
+## INTERACTIVE COMPONENT 
+st.subheader("Interactive Risk Analysis")
+
+st.write(
+    """
+    Use the filters below to explore counties based on storm severity, frequency, and damage levels. 
+    These filters help identify counties with the most significant disaster impacts.
+    """
+)
+
+# Create filter section
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("**Storm Impact Filters**")
+    
+    severity_threshold = st.select_slider(
+        "Minimum Storm Severity",
+        options=["Any Severity", "Mild (>0.2)", "Moderate (>0.4)", "Severe (>0.6)", "Extreme (>0.8)"],
+        value="Any Severity",
+        help="Filter counties by their average storm severity (0 = mild, 1 = extreme)"
+    )
+    
+    min_events = st.slider(
+        "Minimum Storm Events",
+        min_value=0,
+        max_value=100,
+        value=0,
+        step=5,
+        help="Show counties with at least this many storm events"
+    )
+
+with col2:
+    st.write("**Damage and Display Options**")
+    
+    damage_filter = st.select_slider(
+        "Property Damage Level",
+        options=["Any Damage", "Low (<$500K)", "Medium ($500K-$5M)", "High ($5M-$50M)", "Extreme (>$50M)"],
+        value="Any Damage",
+        help="Filter by total property damage from storms"
+    )
+    
+    show_risk_type = st.radio(
+        "Map Display",
+        options=["Overall Risk", "Disaster Risk Only", "Medical Risk Only", "All Three Risk Types"],
+        index=0,
+        help="Choose which risk scores to display on maps"
+    )
+
+# Apply filters button
+apply_filters = st.button("🔍 Apply Filters", type="primary", use_container_width=True)
+
+if apply_filters or 'filters_applied' not in st.session_state:
+    st.session_state.filters_applied = True
+
+if st.session_state.get('filters_applied', False):
+    
+    st.success("✅ Filters applied! Showing counties matching your criteria.")
+    
+    # Load base table
+    filtered_risk = session.table("PROJECT_DB_FINAL.PROCESSED_DATA.COUNTY_RISK_PREDICTIONS_WITH_STORM")
+    
+    # Apply severity threshold
+    severity_map = {
+        "Any Severity": 0.0,
+        "Mild (>0.2)": 0.2,
+        "Moderate (>0.4)": 0.4,
+        "Severe (>0.6)": 0.6,
+        "Extreme (>0.8)": 0.8
+    }
+    min_severity = severity_map[severity_threshold]
+    
+    from snowflake.snowpark.functions import lit
+    
+    if min_severity > 0:
+        filtered_risk = filtered_risk.filter(col("STORM_SEVERITY_MEAN") >= lit(min_severity))
+    
+    # Apply event count filter
+    if min_events > 0:
+        filtered_risk = filtered_risk.filter(col("STORM_EVENT_COUNT") >= lit(min_events))
+    
+    # Apply damage filter
+    damage_map = {
+        "Any Damage": 0,
+        "Low (<$500K)": (0, 500000),
+        "Medium ($500K-$5M)": (500000, 5000000),
+        "High ($5M-$50M)": (5000000, 50000000),
+        "Extreme (>$50M)": (50000000, 1e12)
+    }
+    
+    if damage_filter != "Any Damage":
+        min_damage, max_damage = damage_map[damage_filter]
+        filtered_risk = filtered_risk.filter(
+            (col("STORM_DAMAGE_PROPERTY_TOTAL") >= lit(min_damage)) &
+            (col("STORM_DAMAGE_PROPERTY_TOTAL") < lit(max_damage))
+        )
+    
+    # Join with other tables
+    filtered_final = session.table("PROJECT_DB_FINAL.PROCESSED_DATA.FINAL_MASTER_DATASET")
+    filtered_geojson = session.table("PROJECT_DB_FINAL.PROCESSED_DATA.GEOJSON").select(
+        col("FEATURE").alias("FEATURE"),
+        col("FEATURE")["properties"]["GEOID"].cast("STRING").alias("GEOID")
+    )
+    
+    filtered_geojson = filtered_geojson.withColumnRenamed("GEOID", "FIPS_CODE")
+    filtered_risk = filtered_risk.withColumnRenamed("FIPS_CODE", "FIPS_CODE")
+    filtered_final = filtered_final.withColumnRenamed("FIPS_CODE", "FIPS_CODE")
+    
+    # Join data
+    filtered_df = filtered_final.join(filtered_geojson, "FIPS_CODE")
+    filtered_df = filtered_df.join(filtered_risk, "FIPS_CODE")
+    
+    # Convert to pandas
+    filtered_pdf = filtered_df.to_pandas()
+    
+    # Display statistics
+    st.write("---")
+    
+    if len(filtered_pdf) == 0:
+        st.warning("⚠️ No counties match your filter criteria. Try adjusting the filters.")
+    else:
+        st.write(f"### Filtered Results: {len(filtered_pdf)} counties")
+        
+        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+        
+        with col_stat1:
+            avg_severity = filtered_pdf['STORM_SEVERITY_MEAN'].mean()
+            st.metric(
+                "Avg Storm Severity",
+                f"{avg_severity:.2f}",
+                help="Mean storm severity (0-1 scale)"
+            )
+        
+        with col_stat2:
+            total_events = filtered_pdf['STORM_EVENT_COUNT'].sum()
+            st.metric(
+                "Total Events",
+                f"{int(total_events):,}",
+                help="Sum of all storm events"
+            )
+        
+        with col_stat3:
+            avg_disaster_risk = filtered_pdf['DISASTER_RISK'].mean()
+            st.metric(
+                "Avg Disaster Risk",
+                f"{avg_disaster_risk:.1f}/100",
+                help="Mean disaster risk score"
+            )
+        
+        with col_stat4:
+            total_damage = filtered_pdf['STORM_DAMAGE_PROPERTY_TOTAL'].sum()
+            st.metric(
+                "Total Damage",
+                f"${total_damage/1e6:.1f}M",
+                help="Property damage sum"
+            )
+        
+        # Top counties table
+        st.write("---")
+        st.write("### 🔴 Top 10 Highest Disaster Risk Counties")
+        
+        # Find columns
+        def find_column(base_name, columns):
+            matches = [c for c in columns if base_name in c]
+            return matches[0] if matches else None
+        
+        available_cols = filtered_pdf.columns.tolist()
+        
+        fips_col = find_column('FIPS_CODE', available_cols)
+        state_col = find_column('STATE_ABBR', available_cols) 
+        disaster_col = find_column('DISASTER_RISK', available_cols)
+        overall_col = find_column('OVERALL_RISK', available_cols)
+        severity_col = find_column('STORM_SEVERITY_MEAN', available_cols)
+        events_col = find_column('STORM_EVENT_COUNT', available_cols)
+        damage_col = find_column('STORM_DAMAGE_PROPERTY_TOTAL', available_cols)
+        
+        display_cols = [c for c in [fips_col, state_col, disaster_col, overall_col, severity_col, events_col, damage_col] if c]
+        
+        if disaster_col:
+            top_10 = filtered_pdf.nlargest(10, disaster_col)[display_cols].copy()
+            
+            # Rename for display
+            rename_map = {}
+            if fips_col:
+                rename_map[fips_col] = 'FIPS'
+            if state_col:
+                rename_map[state_col] = 'State'
+            if disaster_col:
+                rename_map[disaster_col] = 'Disaster Risk'
+            if overall_col:
+                rename_map[overall_col] = 'Overall Risk'
+            if severity_col:
+                rename_map[severity_col] = 'Avg Severity'
+            if events_col:
+                rename_map[events_col] = 'Events'
+            if damage_col:
+                rename_map[damage_col] = 'Damage ($)'
+            
+            top_10 = top_10.rename(columns=rename_map)
+            
+            # Format damage column
+            if 'Damage ($)' in top_10.columns:
+                top_10['Damage ($)'] = top_10['Damage ($)'].apply(lambda x: f"${x/1e6:.1f}M" if x > 0 else "$0")
+            
+            # Round numeric columns
+            numeric_cols = ['Disaster Risk', 'Overall Risk', 'Avg Severity']
+            for col_name in numeric_cols:
+                if col_name in top_10.columns:
+                    top_10[col_name] = top_10[col_name].round(2)
+            
+            st.dataframe(top_10, use_container_width=True, hide_index=True)
+        
+        # Create geodataframe for maps
+        filtered_pdf['geometry'] = filtered_pdf['FEATURE'].apply(
+            lambda x: shape(json.loads(str(x))['geometry'])
+        )
+        
+        filtered_gdf = gpd.GeoDataFrame(filtered_pdf, geometry='geometry')
+        
+        if filtered_gdf.crs is None:
+            filtered_gdf = filtered_gdf.set_crs(epsg=4326)
+        
+        filtered_gdf_projected = filtered_gdf.to_crs(epsg=3857)
+        filtered_gdf["AREA_SQKM"] = filtered_gdf_projected.geometry.area / 1e6
+        filtered_gdf["POP_DENSITY"] = filtered_gdf["TOTAL_POPULATION"] / filtered_gdf["AREA_SQKM"]
+        
+        # Centroids for bubble map
+        filtered_gdf_points = filtered_gdf.copy()
+        filtered_gdf_points["geometry"] = filtered_gdf_points.geometry.centroid
+        filtered_gdf_points = filtered_gdf_points.to_crs(epsg=4326)
+        filtered_gdf_points["lon"] = filtered_gdf_points.geometry.x
+        filtered_gdf_points["lat"] = filtered_gdf_points.geometry.y
+        
+        # Display maps
+        st.write("---")
+        st.write("### 🗺️ Interactive Maps - Filtered Counties")
+        
+        # Determine which risk types to show
+        risk_types_to_show = []
+        if show_risk_type == "Overall Risk":
+            risk_types_to_show = [("Overall Risk", "OVERALL_RISK")]
+        elif show_risk_type == "Disaster Risk Only":
+            risk_types_to_show = [("Disaster Risk", "DISASTER_RISK")]
+        elif show_risk_type == "Medical Risk Only":
+            risk_types_to_show = [("Medical Risk", "MEDICAL_RISK")]
+        else:  # All Three
+            risk_types_to_show = [
+                ("Disaster Risk", "DISASTER_RISK"),
+                ("Medical Risk", "MEDICAL_RISK"),
+                ("Infrastructure Risk", "INFRASTRUCTURE_RISK")
+            ]
+        
+        for risk_name, risk_col in risk_types_to_show:
+            st.write(f"#### {risk_name}")
+            
+            # Find actual column name
+            actual_risk_col = find_column(risk_col, filtered_gdf_points.columns.tolist())
+            
+            if actual_risk_col:
+                # Find STATE_ABBR column (handles Snowflake prefixes)
+                state_abbr_col = find_column('STATE_ABBR', filtered_gdf_points.columns.tolist())
+                
+                # Build hover data dict
+                hover_data_dict = {
+                    "FIPS_CODE": True,
+                    "POP_DENSITY": ":.0f",
+                    "STORM_SEVERITY_MEAN": ":.2f",
+                    "STORM_EVENT_COUNT": ":.0f",
+                    actual_risk_col: ":.1f",
+                    "lat": False,
+                    "lon": False
+                }
+                
+                # Add STATE_ABBR if it exists
+                if state_abbr_col:
+                    hover_data_dict[state_abbr_col] = True
+                
+                fig = px.scatter_mapbox(
+                    filtered_gdf_points,
+                    lat="lat",
+                    lon="lon",
+                    color=actual_risk_col,
+                    size="POP_DENSITY",
+                    hover_name="FIPS_CODE",
+                    hover_data=hover_data_dict,
+                    color_continuous_scale="viridis",
+                    size_max=25,
+                    zoom=4,
+                    center={"lat": 32, "lon": -86},
+                    height=600,
+                    mapbox_style="carto-positron",
+                    title=f"{risk_name} - Filtered Counties"
+                )
+                
+                fig.update_layout(
+                    margin={"r":0,"t":40,"l":0,"b":0},
+                    coloraxis_colorbar=dict(title=risk_name)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning(f"Could not find {risk_col} column in data")
+        
+        # Comparison section
+        st.write("---")
+        st.write("### 📊 Compare Filtered vs. All Counties")
+        
+        col_compare1, col_compare2 = st.columns(2)
+        
+        with col_compare1:
+            st.write("**Filtered Counties**")
+            st.write(f"Count: {len(filtered_pdf)}")
+            st.write(f"Avg Severity: {filtered_pdf['STORM_SEVERITY_MEAN'].mean():.3f}")
+            st.write(f"Avg Overall Risk: {filtered_pdf['OVERALL_RISK'].mean():.1f}")
+        
+        with col_compare2:
+            st.write("**All Counties (Baseline)**")
+            st.write(f"Count: 790")
+            
+            # Load full dataset for comparison
+            full_risk = session.table("PROJECT_DB_FINAL.PROCESSED_DATA.COUNTY_RISK_PREDICTIONS_WITH_STORM").to_pandas()
+            st.write(f"Avg Severity: {full_risk['STORM_SEVERITY_MEAN'].mean():.3f}")
+            st.write(f"Avg Overall Risk: {full_risk['OVERALL_RISK'].mean():.1f}")
+
+st.write("---")
+## INTERACTIVE COMPONENT END
 
 
 st.subheader("Geospatial Maps")

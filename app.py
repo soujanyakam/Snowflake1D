@@ -9,6 +9,7 @@ import plotly.express as px
 import json
 import os
 from dotenv import load_dotenv
+import re
 
 st.title(f"Navigating Healthcare Deserts: Snowflake 1D")
 st.write(
@@ -558,6 +559,7 @@ pdf['geometry'] = pdf['FEATURE'].apply(
 
 # create geodataframe (contain one column with geometry information that can be used for geographical visualizations)
 gdf = gpd.GeoDataFrame(pdf, geometry='geometry')
+gdf["geometry"] = gdf["geometry"].simplify(tolerance=0.01, preserve_topology=True)
 
 
 # use EPSG:4326, which is the geographic coordinate system that plotly.express uses
@@ -621,13 +623,17 @@ pdf2['geometry'] = pdf2['FEATURE'].apply(
     lambda x: shape(json.loads(str(x))['geometry'])
 )
 
+
 # create geodataframe (contain one column with geometry information that can be used for geographical visualizations)
 gdf2 = gpd.GeoDataFrame(pdf2, geometry='geometry')
+gdf2["geometry"] = gdf2["geometry"].simplify(tolerance=0.01, preserve_topology=True)
+geojson_dict = json.loads(gdf2.to_json())
+
 
 def plot_polygon_map(color_type):
     map = px.choropleth_mapbox(
         gdf2,
-        geojson=gdf2.geometry.__geo_interface__,  
+        geojson=geojson_dict,  
         locations=gdf2.index,
         color=color_type,
         hover_name='FIPS_CODE',
@@ -639,6 +645,76 @@ def plot_polygon_map(color_type):
     )
 
     st.plotly_chart(map)
+
+
+# Helper function
+def generate_deepseek_response(prompt, **params):
+    cortex_prompt = f"'[INST] {prompt} [/INST]'"
+    prompt_data = [{'role': 'user', 'content': cortex_prompt}], params
+    prompt_json = escape_sql_string(json.dumps(prompt_data))
+    response = session.sql(
+        "select snowflake.cortex.complete(?, ?)", 
+        params=['claude-sonnet-4-5', prompt_json]
+    ).collect()[0][0]
+    
+    return response
+
+def extract_think_content(response):
+    think_pattern = r'<think>(.*?)</think>'
+    think_match = re.search(think_pattern, response, re.DOTALL)
+    
+    if think_match:
+        think_content = think_match.group(1).strip()
+        main_response = re.sub(think_pattern, '', response, flags=re.DOTALL).strip()
+        return think_content, main_response
+    return None, response
+
+def escape_sql_string(s):
+    return s.replace("'", "''")
+
+sql_statement_all = """SELECT FIPS_CODE, STATE_ABBR, MEDICAL_RISK, DISASTER_RISK, OVERALL_RISK
+FROM PROJECT_DB_FINAL.PROCESSED_DATA.COUNTY_RISK_PREDICTIONS_WITH_STORM 
+    """
+df = session.sql(sql_statement_all).to_pandas()
+st.dataframe(df)
+
+# user_queries = ["What is an SVI score and which FIPS codes have the highest SVI scores?",
+#                 "What are HPSA scores and which states have the highest HPSA scores?",
+#                 "Which FIP codes have the highest overall risk score, medical risk score, and disaster risk score?"]
+
+# question = st.selectbox("Explore our data! What would you like to know?", user_queries)
+question = st.text_input("Explore our data! Type a question in the text box below: ", "Which FIP codes have the highest overall risk score, medical risk score, and disaster risk score?")
+
+prompt = [
+    {
+        'role': 'system',
+        'content': 'You are a helpful assistant that uses provided data to answer natural language questions.'
+    },
+    {
+        'role': 'user',
+        'content': (
+            f'The user has asked a question: {question}. '
+            f'Please use this data to answer the question: {df.to_markdown(index=False)}'
+        )
+    },
+    {
+        'temperature': 0.7,
+        'max_tokens': 1000,
+        'guardrails': True
+    }
+]
+
+
+if st.button("Submit"):
+    status_container = st.status("Thinking ...", expanded=True)
+    with status_container:
+        response = generate_deepseek_response(prompt)
+        think_content, main_response = extract_think_content(response)
+        if think_content:
+            st.write(think_content)
+                
+    status_container.update(label="Thoughts", state="complete", expanded=False)
+    st.markdown(main_response)
 
 #use functions defined above to plot
 plot_population_density_map('OVERALL_RISK')

@@ -110,8 +110,8 @@ We trained a random forest model, decision tree model, and a linear regression m
 
 ## 📈 **Model Evaluation**
 
-**Natural Disaster Prediction Model** 
-<br> <br><img width="212" height="202" alt="storm_classification" src="https://github.com/user-attachments/assets/621e350f-d5c1-4d39-a623-f6eafce6e73a" />
+### **Natural Disaster Prediction Model** 
+<img width="212" height="202" alt="storm_classification" src="https://github.com/user-attachments/assets/621e350f-d5c1-4d39-a623-f6eafce6e73a" />
 <br> The classification report shows that the model performs strongly on common storm types like Wind, Hail, and Flood, but struggles with rarer or visually similar categories such as Lightning and Dust Storm.
 <br> <br>
 <br><img width="241" height="206" alt="confusion_matrix" src="https://github.com/user-attachments/assets/5f19e4af-cabc-4df2-ac90-243cab69632f" />
@@ -119,11 +119,14 @@ We trained a random forest model, decision tree model, and a linear regression m
 <br> <br>
 <br><img width="308" height="231" alt="important_features" src="https://github.com/user-attachments/assets/d16257ce-407b-4a6d-bb99-0f9e8a7655c6" />
 <br>Geographic and Magnitude features are the most significant and repeated, and damage costs are a key indicator for storm type
-<br> <br>
-**Risk Score Model**
 <br> 
-<img width="358" height="214" alt="actual" src="https://github.com/user-attachments/assets/07578d66-53ea-46ca-a114-7313e357cbab" /><img width="345" height="193" alt="data" src="https://github.com/user-attachments/assets/8b3509ef-230b-44ae-8d9c-b0d7c4091898" /><img width="314" height="209" alt="most_important" src="https://github.com/user-attachments/assets/aca946fc-4cdf-414f-a8c4-488c421d4cb7" />
-<br>*NOTE: Red = storm features
+
+### **Risk Score Model**
+<img width="358" height="214" alt="actual" src="https://github.com/user-attachments/assets/07578d66-53ea-46ca-a114-7313e357cbab" />
+<br><img width="345" height="193" alt="data" src="https://github.com/user-attachments/assets/8b3509ef-230b-44ae-8d9c-b0d7c4091898" />
+<br><img width="314" height="209" alt="most_important" src="https://github.com/user-attachments/assets/aca946fc-4cdf-414f-a8c4-488c421d4cb7" />
+<br>*NOTE: Red = storm features <br> <br>
+
 - Infrastructure (traffic congestion) and storms are very significant when predicting risk areas
 - Medical Access is crucial to predicting community vulnerability
 - Social factors compiled alongside disaster and medical access risk increase an area’s chances of being at risk
@@ -135,14 +138,18 @@ We trained a random forest model, decision tree model, and a linear regression m
 - To create geospatial visualizations, we created a geojson table to store the geometries for all of the FIPS code regions
 - We downloaded a Shapefile that contained all of all the counties in the United States from the U.S. Census Bureau, converted coordinates to the WGS84 system (EPSG:4326) to ensure compatibility with the Snowflake GEOGRAPHY type, uploaded data into a ``geojson`` table, and joined this table with other tables to create visualizations
 
-**Interactive Storm Impact Map**
+### **Interactive Storm Impact Map**
 
-https://github.com/user-attachments/assets/a543d19f-4864-40af-bb45-49ab1ff2397c
+
+
+https://github.com/user-attachments/assets/7aedf390-604c-4dbf-8ee9-dd8ed4698561
+
+
 
 - Users can filter based on number of storm events, storm severity, property damage level, and the type of risk (overall risk, disaster risk, & medical risk)
 - Results are displayed in a tabular and geospatial format
 
-**Geospatial Risk Maps**
+###  **Geospatial Risk Maps**
 - We created maps based on three different risk scores: overall risk, medical risk, and disaster risk
 - Both a polygon and population density map were created to visualize the different types of risks, and higher risk scores indicate that a county is more at risk
 - Claude Sonnet 4.5 was integrated to provide data insights and resource allocation recommendations 
@@ -151,7 +158,11 @@ https://github.com/user-attachments/assets/a543d19f-4864-40af-bb45-49ab1ff2397c
 <img width="400" height="265" alt="population_density_overall_risk" src="https://github.com/user-attachments/assets/0d790952-65c5-48dc-a570-946bf77e8d7b" /> <img width="500" height="235" alt="polygon_overall_risk" src="https://github.com/user-attachments/assets/b9bee2c3-f9df-47a6-ae32-c2d8af61c1fe" />
 
 
-https://github.com/user-attachments/assets/9865ffc5-1de8-4810-b37f-2dac8e3ff5a0
+
+https://github.com/user-attachments/assets/34663307-1224-4ce2-ba90-60f2916d1111
+
+
+
 
 ## 🚀 **Next Steps**
 - Expand the scope of the project to include more regions of the United States, as our current project focuses on the Southeast region specifically

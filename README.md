@@ -7,7 +7,7 @@
 | Sara Alaidroos | @Sara5722 | Data preprocessing, dataset documentation, exploratory data analysis (EDA)|
 | Anushmita Dey   | @anushmita06  | Model creation, Model integration, Model evaluation, Streamlit development |
 | Vivian Gao    | @vi4849  | Geospatial visualizations, Snowflake Cortex LLM integration, Streamlit development                |
-| Soujanya Kamalapur | | Model creation & development |
+| Soujanya Kamalapur | @soujanyakam | Model creation & development |
 | Paula Agyeman | | Risk score development |
 | Michael Montanez | | Data preprocessing | 
 
